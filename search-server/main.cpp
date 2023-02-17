@@ -61,11 +61,14 @@ public:
         ++document_count_;
         
         const vector<string> words = SplitIntoWordsNoStop(document);
+        /* так как индекс - это мапа, и у нас там для документа будут лежать только уникальные слова 
+        без дублей, то для расчёта tf можно воспользоваться следующим алгоритмом:
+        1. Рассчитать вес одного слова в документе.
+        2. Обойти все слова в документе увеличивая их TF в index[word][document_id] на вес одного слова.
+        */
+        const double single_word_share = 1.0 / words.size();
         for (const auto& word : words) {
-            int word_freq = count_if(words.begin(), words.end(), [&word](const auto& next_word){
-                return word == next_word;
-            });
-            index_[word][document_id] = static_cast<double>(word_freq) / words.size();
+            index_[word][document_id] += single_word_share;
         }
     }
 
