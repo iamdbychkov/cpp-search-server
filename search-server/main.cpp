@@ -146,7 +146,20 @@ struct Document {
     int id;
     double relevance;
     int rating;
+
+    Document() {
+        id = 0;
+        relevance = 0.0;
+        rating = 0;
+    }
+
+    Document(int id_, double relevance_, int rating_) {
+        id = id_;
+        relevance = relevance_;
+        rating = rating_;
+    }
 };
+
 
 enum class DocumentStatus {
     ACTUAL,
@@ -175,9 +188,21 @@ ostream& operator << (ostream& o, const DocumentStatus& status) {
 
 class SearchServer {
 public:
-    void SetStopWords(const string& text) {
+
+    SearchServer() = default;
+
+    SearchServer(const string& text) {
         for (const string& word : SplitIntoWords(text)) {
             stop_words_.insert(word);
+        }
+    }
+
+    template<typename Container>
+    explicit SearchServer(const Container& stop_words) {
+        for (const string& word : stop_words) {
+            if (!word.empty() && stop_words_.count(word) == 0) {
+                stop_words_.insert(word);
+            }
         }
     }
 
@@ -219,6 +244,10 @@ public:
 
     int GetDocumentCount() const {
         return documents_.size();
+    }
+
+    const set<string>& GetStopWords() {
+        return stop_words_;
     }
 
     tuple<vector<string>, DocumentStatus> MatchDocument(const string& raw_query,
@@ -372,8 +401,7 @@ void TestExcludeStopWordsFromAddedDocumentContent() {
     }
 
     {
-        SearchServer server;
-        server.SetStopWords("in the"s);
+        SearchServer server{"in the"s};
         server.AddDocument(doc_id, content, DocumentStatus::ACTUAL, ratings);
         ASSERT_HINT(server.FindTopDocuments("in"s).empty(),
                     "Stop words must be excluded from documents"s);
@@ -432,8 +460,7 @@ void TestDocumentsAreSortedByItDescendingRelevance() {
         {45, "cat in the city of Beijing of China country"s, {1, 2, 3}},
     };
 
-    SearchServer server;
-    server.SetStopWords("in the"s);
+    SearchServer server{"in the"s};
     for (const auto& [id, content, ratings] : test_documents_data) {
         server.AddDocument(id, content, DocumentStatus::ACTUAL, ratings);
     }
@@ -511,8 +538,7 @@ void TestDocumentsFiltering() {
         {4, "cat in the city of Beijing of China country"s, {3, 3, 4}, DocumentStatus::BANNED},
     };
 
-    SearchServer server;
-    server.SetStopWords("in the"s);
+    SearchServer server{"in the"s};
     for (const auto& [id, content, ratings, status] : test_documents_data) {
         server.AddDocument(id, content, status, ratings);
     }
@@ -567,8 +593,7 @@ void TestFindTopDocumentsWithSpecificStatus() {
         {4, "cat in the city of Beijing of China country"s, {3, 3, 4}, DocumentStatus::IRRELEVANT},
     };
 
-    SearchServer server;
-    server.SetStopWords("in the"s);
+    SearchServer server{"in the"s};
     for (const auto& [id, content, ratings, status] : test_documents_data) {
         server.AddDocument(id, content, status, ratings);
     }
@@ -612,8 +637,7 @@ void TestDocsRelevanceAreCalculatedCorrectly() {
         {45, "cat in the city of Beijing of China country"s, {1, 2, 3}},
     };
 
-    SearchServer server;
-    server.SetStopWords("in the and of"s);
+    SearchServer server{"in the and of"s};
     for (const auto& [id, content, ratings] : test_documents_data) {
         server.AddDocument(id, content, DocumentStatus::ACTUAL, ratings);
     }
@@ -668,6 +692,27 @@ void TestDocsRelevanceAreCalculatedCorrectly() {
 
 }
 
+void TestSearchServerInitializer() {
+    set<string> expected = {"и"s, "в"s, "на"s};
+    {
+        const vector<string> stop_words_vector = {"и"s, "в"s, "на"s, ""s, "в"s};
+        SearchServer search_server(stop_words_vector);
+        const set<string>& actual = search_server.GetStopWords();
+        ASSERT_EQUAL(expected, actual);
+    }
+    {
+        const set<string> stop_words_set = {"и"s, "в"s, "на"s};
+        SearchServer search_server(stop_words_set);
+        const set<string>& actual = search_server.GetStopWords();
+        ASSERT_EQUAL(expected, actual);
+    }
+    {
+        SearchServer search_server("  и  в на   "s);
+        const set<string>& actual = search_server.GetStopWords();
+        ASSERT_EQUAL(expected, actual);
+    }
+}
+
 // Функция TestSearchServer является точкой входа для запуска тестов
 void TestSearchServer() {
     RUN_TEST(TestExcludeStopWordsFromAddedDocumentContent);
@@ -677,6 +722,7 @@ void TestSearchServer() {
     RUN_TEST(TestDocumentsFiltering);
     RUN_TEST(TestFindTopDocumentsWithSpecificStatus);
     RUN_TEST(TestDocsRelevanceAreCalculatedCorrectly);
+    RUN_TEST(TestSearchServerInitializer);
 }
 void PrintDocument(const Document& document) {
     cout << "{ "s
@@ -687,8 +733,7 @@ void PrintDocument(const Document& document) {
 
 int main() {
     TestSearchServer();
-    SearchServer search_server;
-    search_server.SetStopWords("и в на"s);
+    SearchServer search_server{"и в на"s};
     search_server.AddDocument(0, "белый кот и модный ошейник"s,        DocumentStatus::ACTUAL, {8, -3});
     search_server.AddDocument(1, "пушистый кот пушистый хвост"s,       DocumentStatus::ACTUAL, {7, 2, 7});
     search_server.AddDocument(2, "ухоженный пёс выразительные глаза"s, DocumentStatus::ACTUAL, {5, -12, 2, 1});
