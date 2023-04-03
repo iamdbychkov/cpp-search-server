@@ -107,6 +107,8 @@ void RunTestImpl(const callable& function, const string& function_string) {
 #define RUN_TEST(func)  RunTestImpl(func, #func)
 
 const int MAX_RESULT_DOCUMENT_COUNT = 5;
+const double EPSILON = 1e-6;
+
 string ReadLine() {
     string s;
     getline(cin, s);
@@ -192,13 +194,16 @@ public:
     template<typename Filter>
     vector<Document> FindTopDocuments(const string& raw_query, Filter filter) const {
         const Query query = ParseQuery(raw_query);
-        auto matched_documents = FindAllDocuments(query, filter); sort(matched_documents.begin(), matched_documents.end(), [](const Document& lhs, const Document& rhs) {
-                 if (abs(lhs.relevance - rhs.relevance) < 1e-6) {
-                     return lhs.rating > rhs.rating;
-                 } else {
-                     return lhs.relevance > rhs.relevance;
-                 }
-             });
+        auto matched_documents = FindAllDocuments(query, filter);
+
+        sort(matched_documents.begin(), matched_documents.end(), [](const Document& lhs, const Document& rhs) {
+                if (abs(lhs.relevance - rhs.relevance) < EPSILON) {
+                    return lhs.rating > rhs.rating;
+                } else {
+                    return lhs.relevance > rhs.relevance;
+                }
+            }
+        );
         if (matched_documents.size() > MAX_RESULT_DOCUMENT_COUNT) {
             matched_documents.resize(MAX_RESULT_DOCUMENT_COUNT);
         }
@@ -440,6 +445,13 @@ void TestDocumentsAreSortedByItDescendingRelevance() {
         ASSERT_EQUAL(found_docs.size(), 2u);
         ASSERT_EQUAL(found_docs[0].id, 43u);
         ASSERT_EQUAL(found_docs[1].id, 44u);
+        double prev_relevance = found_docs[0].relevance;
+        for (auto& doc : found_docs) {
+            // Если из текущего relevance вычесть relevance предыдущего документа в очереди, то должно получиться число
+            // меньше, либо равное нулю, т.к. первыми в выдаче должны идти документы с бОльшим relevance.
+            ASSERT_HINT(doc.relevance - prev_relevance <= 0, "Documents are not sorted by it's relevance");
+            prev_relevance = doc.relevance;
+        }
     }
     // Чем больше слов в документе тем меньше TF слова из поискового запроса, а соответственно и произведение TF-IDF, поэтому
     // для такого запроса вверху должен оказаться документ под id 42, а 44 уйти вниз.
@@ -450,6 +462,13 @@ void TestDocumentsAreSortedByItDescendingRelevance() {
         ASSERT_EQUAL(found_docs[0].id, 42u);
         ASSERT_EQUAL(found_docs[1].id, 44u);
         ASSERT_EQUAL(found_docs[2].id, 45u);
+        double prev_relevance = found_docs[0].relevance;
+        for (auto& doc : found_docs) {
+            // Если из текущего relevance вычесть relevance предыдущего документа в очереди, то должно получиться число
+            // меньше, либо равное нулю, т.к. первыми в выдаче должны идти документы с бОльшим relevance.
+            ASSERT_HINT(doc.relevance - prev_relevance <= 0, "Documents are not sorted by it's relevance");
+            prev_relevance = doc.relevance;
+        }
     }
 }
 
@@ -630,7 +649,7 @@ void TestDocsRelevanceAreCalculatedCorrectly() {
      */
 
     // Погрешность в две десятки? Ну, может быть, ручные вычисления вряд ли точно попадут в ожидания от программы, поэтому так.
-    const double EPSILON = 0.002;
+    const double EPSILON_TEST = 0.002;
     {
         const auto found_docs = server.FindTopDocuments("cat in the city"s);
         vector<tuple<int, double>> expected_result = {
@@ -642,7 +661,7 @@ void TestDocsRelevanceAreCalculatedCorrectly() {
         for (int i = 0; i < static_cast<int>(expected_result.size()); ++i) {
             const auto [expected_id, expected_relevance] = expected_result[i];
             ASSERT_EQUAL(found_docs[i].id, expected_id);
-            ASSERT_HINT(abs(found_docs[i].relevance - expected_relevance) < EPSILON, "Error threshold exceeded maximum allowed value.");
+            ASSERT_HINT(abs(found_docs[i].relevance - expected_relevance) < EPSILON_TEST, "Error threshold exceeded maximum allowed value.");
         }
 
     }
