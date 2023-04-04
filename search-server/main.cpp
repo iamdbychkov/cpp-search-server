@@ -10,6 +10,7 @@
 #include <iostream>
 #include <cstdlib>
 #include <iomanip>
+#include <optional>
 
 using namespace std;
 
@@ -291,16 +292,16 @@ public:
         return SearchServer::INVALID_DOCUMENT_ID;
     }
 
-    [[nodiscard]] bool MatchDocument(
-        const string& raw_query, int document_id, tuple<vector<string>, DocumentStatus>& result
+    optional<tuple<vector<string>, DocumentStatus>> MatchDocument(
+        const string& raw_query, int document_id
     ) const {
 
         Query query;
         if (document_id < 0 || !ParseQuery(raw_query, query)) {
-            return false;
+            return nullopt;
         }
 
-        vector<string>& matched_words = get<0>(result);
+        vector<string> matched_words;
         for (const string& word : query.plus_words) {
             if (word_to_document_freqs_.count(word) == 0) {
                 continue;
@@ -318,9 +319,7 @@ public:
                 break;
             }
         }
-        get<1>(result) = documents_.at(document_id).status;
-
-        return true;
+        return {{matched_words, documents_.at(document_id).status}};
     }
 
 private:
@@ -494,21 +493,26 @@ private:
         {
             SearchServer server;
             (void) server.AddDocument(doc_id, content, DocumentStatus::ACTUAL, ratings);
-            tuple<vector<string>, DocumentStatus> match_result;
-            ASSERT(server.MatchDocument("cat city"s, doc_id, match_result));
             vector<string> expected_words = {"cat"s, "city"s};
-            ASSERT_EQUAL(get<0>(match_result), expected_words);
-            ASSERT_EQUAL(get<1>(match_result), DocumentStatus::ACTUAL);
+            if (const auto match_result = server.MatchDocument("cat city"s, doc_id)) {
+                ASSERT_EQUAL(get<0>(*match_result), expected_words);
+                ASSERT_EQUAL(get<1>(*match_result), DocumentStatus::ACTUAL);
+            } else {
+                ASSERT_HINT(false, "MatchDocument returned error for a correct input");
+            }
         }
 
         // Минус-слова в запросе, MatchDocument должен вернуть пустой список слов.
+
         {
             SearchServer server;
             (void) server.AddDocument(doc_id, content, DocumentStatus::ACTUAL, ratings);
-            tuple<vector<string>, DocumentStatus> match_result;
-            ASSERT(server.MatchDocument("cat -city"s, doc_id, match_result));
-            ASSERT(get<0>(match_result).empty());
-            ASSERT_EQUAL(get<1>(match_result), DocumentStatus::ACTUAL);
+            if (const auto match_result = server.MatchDocument("cat -city"s, doc_id)) {
+                ASSERT(get<0>(*match_result).empty());
+                ASSERT_EQUAL(get<1>(*match_result), DocumentStatus::ACTUAL);
+            } else {
+                ASSERT_HINT(false, "MatchDocument returned error for a correct input");
+            }
         }
         // Невалидные поисковые слова для метода MatchDocument.
         {
@@ -520,19 +524,26 @@ private:
                 "cat \x12"s,
             };
             for (const auto& case_words : test_cases) {
-                tuple<vector<string>, DocumentStatus> match_result;
-                ASSERT(!server.MatchDocument(case_words, doc_id, match_result));
-                ASSERT(get<0>(match_result).empty());
-                ASSERT_EQUAL(get<1>(match_result), DocumentStatus::ACTUAL);
+
+                if (const auto match_result = server.MatchDocument(case_words, doc_id)) {
+                    ASSERT_HINT(false, "MatchDocument did not return an error for incorrect input");
+                } else {
+                    ASSERT(get<0>(*match_result).empty());
+                    ASSERT_EQUAL(get<1>(*match_result), DocumentStatus::ACTUAL);
+                }
             }
         }
-        // Вызов MatchDocument с отрицательынм id документа.
+        // Вызов MatchDocument с отрицательным id документа.
         {
             SearchServer server;
-            tuple<vector<string>, DocumentStatus> match_result;
-            ASSERT(!server.MatchDocument("cat -city"s, -1, match_result));
-            ASSERT(get<0>(match_result).empty());
+
+            if (const auto match_result = server.MatchDocument("cat -city"s, -1)) {
+                ASSERT_HINT(false, "MatchDocument did not return an error for incorrect input");
+            } else {
+                ASSERT(get<0>(*match_result).empty());
+            }
         }
+
     }
 
     void TestDocumentsAreSortedByItDescendingRelevance() {
@@ -873,7 +884,6 @@ void TestGetDocumentId() {
     for (const auto& [id, content, ratings] : test_documents_data) {
         (void) server.AddDocument(id, content, DocumentStatus::ACTUAL, ratings);
     }
-    cout << server.GetDocumentId(0);
     ASSERT(server.GetDocumentId(0) == 4);
     ASSERT(server.GetDocumentId(1) == 43);
     ASSERT(server.GetDocumentId(2) == 49);
