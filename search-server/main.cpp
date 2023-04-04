@@ -214,6 +214,11 @@ public:
             return false;
         }
         const vector<string> words = SplitIntoWordsNoStop(document);
+        for (const string& word : words) {
+            if (!IsValidWord(word)) {
+                return false;
+            }
+        }
         const double inv_word_count = 1.0 / words.size();
         for (const string& word : words) {
             word_to_document_freqs_[word][document_id] += inv_word_count;
@@ -289,9 +294,9 @@ public:
     [[nodiscard]] bool MatchDocument(
         const string& raw_query, int document_id, tuple<vector<string>, DocumentStatus>& result
     ) const {
+
         Query query;
-        bool success = ParseQuery(raw_query, query);
-        if (!success) {
+        if (document_id < 0 || !ParseQuery(raw_query, query)) {
             return false;
         }
 
@@ -520,6 +525,13 @@ private:
                 ASSERT(get<0>(match_result).empty());
                 ASSERT_EQUAL(get<1>(match_result), DocumentStatus::ACTUAL);
             }
+        }
+        // Вызов MatchDocument с отрицательынм id документа.
+        {
+            SearchServer server;
+            tuple<vector<string>, DocumentStatus> match_result;
+            ASSERT(!server.MatchDocument("cat -city"s, -1, match_result));
+            ASSERT(get<0>(match_result).empty());
         }
     }
 
@@ -820,6 +832,13 @@ void TestAddDocument() {
         ASSERT_HINT(search_server.AddDocument(id, content, status, ratings), "Search server did not add document successfully");
         string content2 = "Test adding another document";
         ASSERT_HINT(!search_server.AddDocument(id, content2, status, ratings), "Search server should disallow adding documents if id already exists");
+    }
+    // Не можем добавить документ, если в тексте есть слова с спецсимволами.
+    {
+        SearchServer search_server;
+        int id = 1;
+        string content = "Test adding another document\x10\x12\x15";
+        ASSERT_HINT(!search_server.AddDocument(id, content, status, ratings), "Search server added document with special symbols, which it shouldn't do");
     }
 }
 
