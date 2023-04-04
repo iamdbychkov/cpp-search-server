@@ -278,7 +278,7 @@ public:
     }
 
     int GetDocumentId(int index) const {
-        if (index < static_cast<int>(documents_.size())) {
+        if (index < 0 || index > static_cast<int>(documents_.size())) {
             return SearchServer::INVALID_DOCUMENT_ID;
         }
         int counter = 0;
@@ -725,7 +725,7 @@ private:
 }
 
 void TestDocsRelevanceAreCalculatedCorrectly() {
-        struct DocumentData {
+    struct DocumentData {
         int id;
         string content;
         vector<int> ratings;
@@ -856,6 +856,35 @@ void TestFindTopDocsWithInvalidQuery() {
     }
 }
 
+void TestGetDocumentId() {
+    struct DocumentData {
+        int id;
+        string content;
+        vector<int> ratings;
+    };
+    vector<DocumentData> test_documents_data = {
+        {4, "cat in the city"s, {1, 2, 3}},
+        {43, "dog in the city of Moscow"s, {1, 2, 3}},
+        {49, "cat and dog in the city with mayor cat"s, {1, 2, 3}},
+        {55, "cat in the city of Beijing of China country"s, {1, 2, 3}},
+    };
+
+    SearchServer server;
+    for (const auto& [id, content, ratings] : test_documents_data) {
+        (void) server.AddDocument(id, content, DocumentStatus::ACTUAL, ratings);
+    }
+    cout << server.GetDocumentId(0);
+    ASSERT(server.GetDocumentId(0) == 4);
+    ASSERT(server.GetDocumentId(1) == 43);
+    ASSERT(server.GetDocumentId(2) == 49);
+    ASSERT(server.GetDocumentId(3) == 55);
+
+    // GetDocumentById за пределами кол-ва документов.
+    ASSERT(server.GetDocumentId(4) == SearchServer::INVALID_DOCUMENT_ID);
+    // Отрицательные айди документа
+    ASSERT(server.GetDocumentId(-4) == SearchServer::INVALID_DOCUMENT_ID);
+}
+
 // Функция TestSearchServer является точкой входа для запуска тестов
 void TestSearchServer() {
     RUN_TEST(TestExcludeStopWordsFromAddedDocumentContent);
@@ -869,6 +898,7 @@ void TestSearchServer() {
     RUN_TEST(TestAddDocument);
     RUN_TEST(TestMatchDocumentMethod);
     RUN_TEST(TestFindTopDocsWithInvalidQuery);
+    RUN_TEST(TestGetDocumentId);
 }
 void PrintDocument(const Document& document) {
     cout << "{ "s
