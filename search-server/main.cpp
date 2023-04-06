@@ -122,6 +122,7 @@ void AssertThrowsImpl(const string& expr_str, const string& exception_str, const
 #define ASSERT_THROWS_HINT(expr, exception, hint)                                      \
 	try {                                                                              \
 		expr;                                                                          \
+        ASSERT_HINT(false, #exception + " should've been throwed"s);                    \
 	} catch(const exception& e){                                                       \
 	} catch(...) {                                                                     \
 		AssertThrowsImpl(#expr, #exception, __FILE__, __FUNCTION__, __LINE__, (hint)); \
@@ -530,26 +531,13 @@ void TestMatchDocumentMethod() {
             "cat \x12"s,
         };
         for (const auto& case_words : test_cases) {
-            try {
-                (void) server.MatchDocument(case_words, doc_id);
-                ASSERT_HINT(false, "MatchDocument did not throw an exception for invalid input");
-            } catch(const invalid_argument& e) {
-            } catch(...) {
-                ASSERT_HINT(false, "MatchDocument shoul've raised invalid_argument exception");
-            }
+            ASSERT_THROWS(server.MatchDocument(case_words, doc_id), invalid_argument);
         }
     }
     // Вызов MatchDocument с отрицательным id документа.
     {
         SearchServer server;
-
-        try {
-            (void) server.MatchDocument("cat -city"s, -1);
-            ASSERT_HINT(false, "MatchDocument did not throw an exception for invalid input");
-        } catch(const invalid_argument& e) {
-        } catch(...) {
-            ASSERT_HINT(false, "MatchDocument shoul've raised invalid_argument exception");
-        }
+        ASSERT_THROWS(server.MatchDocument("cat -city"s, -1), invalid_argument);
     }
 }
 
@@ -586,7 +574,7 @@ void TestDocumentsAreSortedByItDescendingRelevance() {
         for (auto& doc : found_docs) {
             // Если из текущего relevance вычесть relevance предыдущего документа в очереди, то должно получиться число
             // меньше, либо равное нулю, т.к. первыми в выдаче должны идти документы с бОльшим relevance.
-            ASSERT_HINT(doc.relevance - prev_relevance <= 0, "Documents are not sorted by it's relevance");
+            ASSERT_HINT(doc.relevance - prev_relevance <= 0, "Documents are not sorted by it's relevance"s);
             prev_relevance = doc.relevance;
         }
     }
@@ -603,7 +591,7 @@ void TestDocumentsAreSortedByItDescendingRelevance() {
         for (auto& doc : found_docs) {
             // Если из текущего relevance вычесть relevance предыдущего документа в очереди, то должно получиться число
             // меньше, либо равное нулю, т.к. первыми в выдаче должны идти документы с бОльшим relevance.
-            ASSERT_HINT(doc.relevance - prev_relevance <= 0, "Documents are not sorted by it's relevance");
+            ASSERT_HINT(doc.relevance - prev_relevance <= 0, "Documents are not sorted by it's relevance"s);
             prev_relevance = doc.relevance;
         }
     }
@@ -718,7 +706,7 @@ void TestFindTopDocumentsWithSpecificStatus() {
         ASSERT_EQUAL(found_docs.size(), 2);
         for (const auto& doc : found_docs) {
             if (doc.id == 1 || doc.id == 2) {
-                ASSERT_HINT(false, "Documents with incorrect status were found"); // Документы с другим статусом
+                ASSERT_HINT(false, "Documents with incorrect status were found"s); // Документы с другим статусом
             }
         }
     }
@@ -790,7 +778,7 @@ void TestDocsRelevanceAreCalculatedCorrectly() {
         for (int i = 0; i < static_cast<int>(expected_result.size()); ++i) {
             const auto [expected_id, expected_relevance] = expected_result[i];
             ASSERT_EQUAL(found_docs[i].id, expected_id);
-            ASSERT_HINT(abs(found_docs[i].relevance - expected_relevance) < EPSILON_TEST, "Error threshold exceeded maximum allowed value.");
+            ASSERT_HINT(abs(found_docs[i].relevance - expected_relevance) < EPSILON_TEST, "Error threshold exceeded maximum allowed value."s);
         }
 
     }
@@ -816,23 +804,24 @@ void TestSearchServerInitializer() {
         const set<string>& actual = search_server.GetStopWords();
         ASSERT_EQUAL(expected, actual);
     }
+    // Тесты на спец символы в стоп слове
+    {
+        for (auto word : {"\x00"s, "\x0F"s, "\x1F"s}) {
+            vector<string> stop_words = {"и"s, "b"s, word};
+            ASSERT_THROWS(SearchServer search_server(stop_words), invalid_argument);
+        }
+    }
 }
 
 void TestAddDocument() {
     // Проверяем, что не можем добавить документ с отрицательным id.
-    string content = "Test adding documents";
+    string content = "Test adding documents"s;
     vector<int> ratings = {5, 5, 5};
     DocumentStatus status = DocumentStatus::ACTUAL;
     {
         SearchServer search_server;
         int id = -1;
-        try {
-            search_server.AddDocument(id, content, status, ratings);
-            ASSERT_HINT(false, "Search server should disallow adding documents with negative id"s);
-        } catch (const invalid_argument& e) {
-        } catch (...) {
-            ASSERT_HINT(false, "Search server should've raised invalid_argument exception."s);
-        }
+        ASSERT_THROWS(search_server.AddDocument(id, content, status, ratings), invalid_argument);
     }
     // Проверяем, что не можем добавить документ с id, если документ с таким id уже
     // добавлен
@@ -840,28 +829,15 @@ void TestAddDocument() {
         SearchServer search_server;
         int id = 1;
         search_server.AddDocument(id, content, status, ratings);
-        string content2 = "Test adding another document";
-        try {
-            search_server.AddDocument(id, content2, status, ratings);
-            ASSERT_HINT(false, "Search server should disallow adding documents if id already exists");
-        } catch (const invalid_argument& e) {
-        } catch (...) {
-            ASSERT_HINT(false, "Search server should've raised invalid_argument exception."s);
-        }
-
+        string content2 = "Test adding another document"s;
+        ASSERT_THROWS(search_server.AddDocument(id, content2, status, ratings), invalid_argument);
     }
     // Не можем добавить документ, если в тексте есть слова с спецсимволами.
     {
         SearchServer search_server;
         int id = 1;
-        string content = "Test adding another document\x10\x12\x15";
-        try {
-            search_server.AddDocument(id, content, status, ratings);
-            ASSERT_HINT(false, "Search server added document with special symbols, which it shouldn't do");
-        } catch (const invalid_argument& e) {
-        } catch (...) {
-            ASSERT_HINT(false, "Search server should've raised invalid_argument exception."s);
-        }
+        string content = "Test adding another document\x10\x12\x15"s;
+        ASSERT_THROWS(search_server.AddDocument(id, content, status, ratings), invalid_argument);
     }
 }
 
@@ -873,13 +849,7 @@ void TestFindTopDocsWithInvalidQuery() {
         "cat \x12"s,
     };
     for (const auto& case_words : test_cases) {
-        try {
-            (void) server.FindTopDocuments(case_words);
-            ASSERT_HINT(false, "Search server found docs using invalid query.");
-        } catch (const invalid_argument& e) {
-        } catch (...) {
-            ASSERT_HINT(false, "Search server should've raised invalid_argument exception."s);
-        }
+        ASSERT_THROWS(server.FindTopDocuments(case_words), invalid_argument);
     }
 }
 
@@ -908,14 +878,7 @@ void TestGetDocumentId() {
     // GetDocumentById за пределами кол-ва документов.
     // Отрицательные айди документа
     for (int doc_id : {4, -1}) {
-        try {
-            (void) server.GetDocumentId(doc_id);
-            ASSERT_HINT(false, "GetDocumentId did not throw an exception for out of range document ID"s);
-        } catch (const out_of_range& e) {
-            ASSERT(e.what() == "Document index is out of range"s);
-        } catch (...) {
-            ASSERT_HINT(false, "GetDocumentId did not throw out_of_range"s);
-        }
+        ASSERT_THROWS(server.GetDocumentId(doc_id), out_of_range);
     }
 }
 
