@@ -263,7 +263,7 @@ public:
     optional<vector<Document>> FindTopDocuments(const string& raw_query) const {
         return FindTopDocuments(
             raw_query,
-            [](int id, DocumentStatus status_to_filter, int rating){ return true; }
+            [](int id, DocumentStatus status_to_filter, int rating){ return status_to_filter == DocumentStatus::ACTUAL; }
         );
     }
 
@@ -690,10 +690,10 @@ void TestFindTopDocumentsWithSpecificStatus() {
     for (const auto& [id, content, ratings, status] : test_documents_data) {
         (void) server.AddDocument(id, content, status, ratings);
     }
-    // Без явного указания статуса, метод возвращает все документы в соответствии с их relevance
+    // Без явного указания статуса, метод возвращает все документы с статусом ACTUAL.
     {
         const auto found_docs = server.FindTopDocuments("cat and city"s).value();
-        ASSERT_EQUAL(found_docs.size(), 4);
+        ASSERT_EQUAL(found_docs.size(), 2);
     }
     // Если указан статус, то должны найтись документы только с этим статусом
     {
