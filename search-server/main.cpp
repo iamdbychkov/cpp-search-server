@@ -11,6 +11,7 @@
 #include <cstdlib>
 #include <iomanip>
 #include <optional>
+#include <stdexcept>
 
 using namespace std;
 
@@ -276,8 +277,8 @@ public:
     }
 
     int GetDocumentId(int index) const {
-        if (index < 0 || index > static_cast<int>(documents_.size())) {
-            return SearchServer::INVALID_DOCUMENT_ID;
+        if (index < 0 || index >= static_cast<int>(documents_.size())) {
+            throw(out_of_range("Document index is out of range"s));
         }
         int counter = 0;
         for (const auto& [id, document] : documents_) {
@@ -864,9 +865,17 @@ void TestGetDocumentId() {
     ASSERT(server.GetDocumentId(3) == 55);
 
     // GetDocumentById за пределами кол-ва документов.
-    ASSERT(server.GetDocumentId(4) == SearchServer::INVALID_DOCUMENT_ID);
     // Отрицательные айди документа
-    ASSERT(server.GetDocumentId(-4) == SearchServer::INVALID_DOCUMENT_ID);
+    for (int doc_id : {4, -1}) {
+        try {
+            (void) server.GetDocumentId(doc_id);
+            ASSERT_HINT(false, "GetDocumentId did not throw an exception for out of range document ID"s);
+        } catch (const out_of_range& e) {
+            ASSERT(e.what() == "Document index is out of range"s);
+        } catch (...) {
+            ASSERT_HINT(false, "GetDocumentId did not throw out_of_range"s);
+        }
+    }
 }
 
 
