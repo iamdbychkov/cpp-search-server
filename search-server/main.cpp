@@ -120,13 +120,13 @@ void AssertThrowsImpl(const string& expr_str, const string& exception_str, const
 }
 
 #define ASSERT_THROWS_HINT(expr, exception, hint)                                      \
-	try {                                                                              \
-		expr;                                                                          \
-        ASSERT_HINT(false, #exception + " should've been throwed"s);                    \
-	} catch(const exception& e){                                                       \
-	} catch(...) {                                                                     \
-		AssertThrowsImpl(#expr, #exception, __FILE__, __FUNCTION__, __LINE__, (hint)); \
-	}                                                                                  \
+    try {                                                                              \
+        expr;                                                                          \
+        ASSERT_HINT(false, #exception + " should've been throwed"s);                   \
+    } catch(const exception& e){                                                       \
+    } catch(...) {                                                                     \
+        AssertThrowsImpl(#expr, #exception, __FILE__, __FUNCTION__, __LINE__, (hint)); \
+    }                                                                                  \
 
 #define ASSERT_THROWS(expr, exception) ASSERT_THROWS_HINT(expr, exception, "");
 
