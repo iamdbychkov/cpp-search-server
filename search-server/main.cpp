@@ -146,6 +146,16 @@ int ReadLineWithNumber() {
     return result;
 }
 
+void CheckIfWordIsValid(const string& word) {
+    // A valid word must not contain special characters
+    if (std::any_of(std::begin(word), std::end(word), [](char c) {
+        return c >= '\0' && c < ' ';
+    })) {
+        throw(invalid_argument("Word cannot contain special symbols"s));
+    }
+}
+
+
 vector<string> SplitIntoWords(const string& text) {
     vector<string> words;
     string word;
@@ -160,6 +170,7 @@ vector<string> SplitIntoWords(const string& text) {
         }
     }
     if (!word.empty()) {
+        CheckIfWordIsValid(word);
         words.push_back(word);
     }
 
@@ -217,18 +228,13 @@ public:
 
     SearchServer() = default;
 
-    SearchServer(const string& text) {
-        for (const string& word : SplitIntoWords(text)) {
-            CheckIfWordIsValid(word);
-            stop_words_.insert(word);
-        }
-    }
+    SearchServer(const string& text) : SearchServer(SplitIntoWords(text)) {}
 
     template<typename Container>
-    explicit SearchServer(const Container& stop_words) {
+    explicit SearchServer(const Container& stop_words) : SearchServer() {
         for (const string& word : stop_words) {
             CheckIfWordIsValid(word);
-            if (!word.empty() && stop_words_.count(word) == 0) {
+            if (!word.empty()) {
                 stop_words_.insert(word);
             }
         }
@@ -240,14 +246,12 @@ public:
             throw(invalid_argument("Document id can't be negative nor be equal to already added documents"s));
         }
         const vector<string> words = SplitIntoWordsNoStop(document);
-        for (const string& word : words) {
-            CheckIfWordIsValid(word);
-        }
         const double inv_word_count = 1.0 / words.size();
         for (const string& word : words) {
             word_to_document_freqs_[word][document_id] += inv_word_count;
         }
         documents_.emplace(document_id, DocumentData{ComputeAverageRating(ratings), status});
+        document_insertion_order_log_.push_back(document_id);
     }
 
     template<typename Filter>
@@ -297,14 +301,7 @@ public:
         if (index < 0 || index >= static_cast<int>(documents_.size())) {
             throw(out_of_range("Document index is out of range"s));
         }
-        int counter = 0;
-        for (const auto& [id, document] : documents_) {
-            if (counter == index) {
-                return id;
-            }
-            ++counter;
-        }
-        return SearchServer::INVALID_DOCUMENT_ID;
+        return document_insertion_order_log_[index];
     }
 
     tuple<vector<string>, DocumentStatus> MatchDocument(
@@ -346,18 +343,10 @@ private:
     set<string> stop_words_;
     map<string, map<int, double>> word_to_document_freqs_;
     map<int, DocumentData> documents_;
+    vector<int> document_insertion_order_log_;
 
     bool IsStopWord(const string& word) const {
         return stop_words_.count(word) > 0;
-    }
-
-    static void CheckIfWordIsValid(const string& word) {
-        // A valid word must not contain special characters
-        if (std::any_of(std::begin(word), std::end(word), [](char c) {
-            return c >= '\0' && c < ' ';
-        })) {
-            throw(invalid_argument("Word cannot contain special symbols"s));
-        }
     }
 
     vector<string> SplitIntoWordsNoStop(const string& text) const {
@@ -395,8 +384,7 @@ private:
             is_minus = true;
             text = text.substr(1);
         }
-        CheckIfWordIsValid(text);
-        if (text.size() == 0 || text[0] == '-') {
+        if (text.empty() || text[0] == '-') {
             throw(invalid_argument("Word can not be empty nor start with multiple minus signs"s));
         }
         return {text, is_minus, IsStopWord(text)};
@@ -861,9 +849,9 @@ void TestGetDocumentId() {
     };
     vector<DocumentData> test_documents_data = {
         {4, "cat in the city"s, {1, 2, 3}},
-        {43, "dog in the city of Moscow"s, {1, 2, 3}},
-        {49, "cat and dog in the city with mayor cat"s, {1, 2, 3}},
         {55, "cat in the city of Beijing of China country"s, {1, 2, 3}},
+        {49, "cat and dog in the city with mayor cat"s, {1, 2, 3}},
+        {43, "dog in the city of Moscow"s, {1, 2, 3}},
     };
 
     SearchServer server;
@@ -871,9 +859,9 @@ void TestGetDocumentId() {
         (void) server.AddDocument(id, content, DocumentStatus::ACTUAL, ratings);
     }
     ASSERT(server.GetDocumentId(0) == 4);
-    ASSERT(server.GetDocumentId(1) == 43);
+    ASSERT(server.GetDocumentId(1) == 55);
     ASSERT(server.GetDocumentId(2) == 49);
-    ASSERT(server.GetDocumentId(3) == 55);
+    ASSERT(server.GetDocumentId(3) == 43);
 
     // GetDocumentById за пределами кол-ва документов.
     // Отрицательные айди документа
